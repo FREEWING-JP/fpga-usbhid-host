@@ -109,8 +109,12 @@ constant SOF:std_logic_vector(7 downto 0):="10100101"; -- non NRZI
 
 constant IN_IN:std_logic_vector(7 downto 0):="10010110";
 
+-- DIV=5
 constant PAS:integer:=5;
 constant DEMI_PAS:integer:=2;--5/2;
+-- DIV=8
+--constant PAS:integer:=8;
+--constant DEMI_PAS:integer:=4;--8/2;
 
 -- 198ms at  7.5MHz // USB_MUL=1 Low Speed
 -- 198ms at 60.0MHz // USB_MUL=8 Full Speed
@@ -121,7 +125,7 @@ constant period_EOP:integer:=1;
 
 constant period_SOF:integer:=12000; --11890+8+3*8+2; --11924
 
-constant TIME_OUT:integer:=8; -- 7.5bit
+--constant TIME_OUT:integer:=8; -- 7.5bit
 
 signal step_cmd: integer range 0 to C_usb_enum_sequence'high := 0;
 
