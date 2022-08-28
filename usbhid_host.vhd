@@ -109,8 +109,12 @@ constant SOF:std_logic_vector(7 downto 0):="10100101"; -- non NRZI
 
 constant IN_IN:std_logic_vector(7 downto 0):="10010110";
 
+-- DIV=5
 constant PAS:integer:=5;
 constant DEMI_PAS:integer:=2;--5/2;
+-- DIV=8
+--constant PAS:integer:=8;
+--constant DEMI_PAS:integer:=4;--8/2;
 
 -- 198ms at  7.5MHz // USB_MUL=1 Low Speed
 -- 198ms at 60.0MHz // USB_MUL=8 Full Speed
