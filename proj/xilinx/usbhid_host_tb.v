@@ -31,6 +31,7 @@ module usbhid_host_tb;
 
 	// Outputs
 	wire [63:0] HID_REPORT;
+	wire HID_REPORT_SET;
 	wire [7:0] dbg_step_ps3;
 	wire [7:0] dbg_step_cmd;
 	wire [7:0] LEDS;
@@ -43,13 +44,14 @@ module usbhid_host_tb;
 
 	// Instantiate the Unit Under Test (UUT)
 	usbhid_host uut (
-		.clk(clk),
-		.reset(reset),
-		.USB_DATA(USB_DATA_BI),
-		.USB_DDATA(USB_DDATA),
-		.HID_REPORT(HID_REPORT),
-		.dbg_step_ps3(dbg_step_ps3),
-		.dbg_step_cmd(dbg_step_cmd),
+		.clk(clk), 
+		.reset(reset), 
+		.USB_DATA(USB_DATA_BI), 
+		.USB_DDATA(USB_DDATA), 
+		.HID_REPORT(HID_REPORT), 
+		.HID_REPORT_SET(HID_REPORT_SET), 
+		.dbg_step_ps3(dbg_step_ps3), 
+		.dbg_step_cmd(dbg_step_cmd), 
 		.LEDS(LEDS)
 	);
 
