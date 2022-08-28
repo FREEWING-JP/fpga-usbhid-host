@@ -125,7 +125,7 @@ constant period_EOP:integer:=1;
 
 constant period_SOF:integer:=12000; --11890+8+3*8+2; --11924
 
-constant TIME_OUT:integer:=8; -- 7.5bit
+--constant TIME_OUT:integer:=8; -- 7.5bit
 
 signal step_cmd: integer range 0 to C_usb_enum_sequence'high := 0;
 
