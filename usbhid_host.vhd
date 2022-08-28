@@ -20,6 +20,7 @@ Port
   USB_DATA   : inout std_logic_vector(1 downto 0); -- USB_DATA(1)=D+ USB_DATA(0)=D- both pull down 15k
   USB_DDATA  : in    std_logic; -- D+ from differential input
   HID_REPORT : out   std_logic_vector(8*REPORT_LEN-1 downto 0);
+  HID_REPORT_SET : out    std_logic;
   dbg_step_ps3 : out std_logic_vector(7 downto 0);
   dbg_step_cmd : out std_logic_vector(7 downto 0);
   LEDS       : out   std_logic_vector(7 downto 0)
@@ -282,6 +283,7 @@ process(clk) is
 		counter_TRAME:=0;
 		counter_PAS:=0;
 		mode_receive:=false;
+		HID_REPORT_SET <= '0';
 	end procedure;
 		
 		
@@ -1315,6 +1317,7 @@ if rising_edge(clk) then
 									step_ps3:=40; -- envoyer un NACK
 								else
 									JOY_mem:=JOY_CANDIDATE_mem;
+								    HID_REPORT_SET <= '1';
 								end if;
 							end if;
 					else
@@ -1347,6 +1350,7 @@ if rising_edge(clk) then
 				end if;
 			when 39=>
 				-- envoyer un ACK
+			    HID_REPORT_SET <= '0';
 				if counter_PAS=DEMI_PAS then
 					if counter_TRAME<8 then
 						USB_DATA<=bit2data(SYNCHRO(8 -1-counter_TRAME));

@@ -24,6 +24,7 @@ module usb_top(
 	inout usb_dp,
 	inout usb_dm,
 	output [7:0] NES_GAME_PAD,
+	output NES_GAME_PAD_ENA,
 	output [3:0] led
     );
 
@@ -36,6 +37,7 @@ module usb_top(
 
 	// Outputs
 	wire [63:0] HID_REPORT;
+	wire HID_REPORT_SET;
 	wire [7:0] dbg_step_ps3;
 	wire [7:0] dbg_step_cmd;
 	wire [7:0] LEDS;
@@ -65,6 +67,7 @@ usbhid_host usbhid_host (
     .USB_DATA({ usb_dp, usb_dm }), 
     .USB_DDATA(USB_DDATA), 
     .HID_REPORT(HID_REPORT), 
+    .HID_REPORT_SET(HID_REPORT_SET), 
     .dbg_step_ps3(dbg_step_ps3), 
     .dbg_step_cmd(dbg_step_cmd), 
     .LEDS(LEDS)
@@ -74,6 +77,7 @@ assign led = NES_GAME_PAD[7:4];
 
 // NES = R,L,D,U,Sta,Sel,B,A
 assign NES_GAME_PAD = { &HID_REPORT[7:6], ~|HID_REPORT[7:6], &HID_REPORT[15:14], ~|HID_REPORT[15:14], HID_REPORT[23], HID_REPORT[22], HID_REPORT[17], HID_REPORT[16] };
+assign NES_GAME_PAD_ENA = HID_REPORT_SET;
 
 /*
 BUFFALO BSGP815GY iBuffalo Classic USB Gamepad for PC
