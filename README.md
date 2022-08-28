@@ -2,15 +2,15 @@
 http://www.neko.ne.jp/~freewing/fpga/usb_host_fpga_vhdl/  
 Support Low Speed & Full Speed USB HID devices .  
 
-![usb 1](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/feature/add_assets/proj/xilinx/assets/usb_host_fpga_schematics.png)  
-![usb 2](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/feature/add_assets/proj/xilinx/assets/usb_host_fpga_18.jpg)  
+![usb 1](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/master/proj/xilinx/assets/usb_host_fpga_schematics.png)  
+![usb 2](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/master/proj/xilinx/assets/usb_host_fpga_18.jpg)  
 I don't have 15k ohm resistor . So I use 22k ohm .  
-![usb 3](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/feature/add_assets/proj/xilinx/assets/usb_connector_pin_assign.jpg)  
-![usb 4](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/feature/add_assets/proj/xilinx/assets/buffalo_bsgp815gy_usb_gamepad_1.jpg)  
+![usb 3](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/master/proj/xilinx/assets/usb_connector_pin_assign.jpg)  
+![usb 4](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/master/proj/xilinx/assets/buffalo_bsgp815gy_usb_gamepad_1.jpg)  
 BUFFALO model BSGP815GY CLASSIC USB GAMEPAD  
-![usb 5](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/feature/add_assets/proj/xilinx/assets/fpga_usb_hid_host_simulator.png)  
+![usb 5](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/master/proj/xilinx/assets/fpga_usb_hid_host_simulator.png)  
 USB Protocol wave form in ISim Simulator .  
-![usb 6](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/feature/add_assets/proj/xilinx/assets/fpga_usb_hid_host_hdl_rtl_schematics.png)  
+![usb 6](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/master/proj/xilinx/assets/fpga_usb_hid_host_hdl_rtl_schematics.png)  
 USB  HID HOST HDL RTL Schematics .  
 ---
 # FPGA USB-HID host
