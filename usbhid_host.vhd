@@ -146,6 +146,7 @@ end generate;
 
 process(clk) is
 	variable step_ps3:integer range 0 to 41:=0;
+	variable step_ps3_sof:integer range 0 to 41:=0;
 	variable next_cmd:boolean:=false;
 	variable counter_RESET:integer range 0 to period_RESET:=0;
 	variable counter_IDLE:integer range 0 to period_IDLE+period_EOP:=0;
@@ -153,6 +154,7 @@ process(clk) is
 	variable counter_SOF_stuff:integer range 0 to period_SOF:=0;
 	
 	variable counter_TRAME:integer:=0;
+	variable counter_TIMEOUT:integer range 0 to 80:=0; -- TIME_OUT
 	
 	variable last_USB_DATA:std_logic_vector(1 downto 0):=EOP;
 	variable mode_receive:boolean:=false;
@@ -308,7 +310,8 @@ process(clk) is
 		TRAME_OUT_DATA1_length:=OUT_DATA1'length;
 		TRAME_OUT_DATA1:=(others=>'0');
 		TRAME_OUT_DATA1(TRAME_OUT_DATA1_length-1 downto 0):=OUT_DATA1;
-		step_ps3:=18;
+		step_ps3:=7; --18;
+		step_ps3_sof:=19;
 	end procedure;
 	
 
@@ -320,13 +323,15 @@ process(clk) is
 		TRAME_SET_DATA0:=DATA;
 		IN_ADDR_ENDP:=IN_IN & ADDR_ENDP;
 		step_ps3:=7;
+		step_ps3_sof:=8;
 	end procedure;
 
 	procedure plug(ADDR_ENDP:std_logic_vector(11+5-1 downto 0)) is
 	begin
 		IN_ADDR_ENDP:=IN_IN & ADDR_ENDP;
 		
-		step_ps3:=34;
+		step_ps3:=7; --34;
+		step_ps3_sof:=35;
 	end procedure;
 
 	variable interval:std_logic_vector(7 downto 0):=(others=>'0');
@@ -408,8 +413,8 @@ if rising_edge(clk) then
 				startup_init;
 				step_ps3:=3;
 				JOY_mem := reverse_any_vector(C_IDLE_REPORT);
-			when 1=> -- test
-			when 2=> -- erreur zap en mode_receive
+--			when 1=> -- test
+--			when 2=> -- erreur zap en mode_receive
 			when 3=>
 				if USB_DATA=UN then
 					step_ps3:=4;
@@ -444,7 +449,7 @@ if rising_edge(clk) then
 			-- TRAME SET (SOF,TRAME_SET_SETUP,TRAME_SET_DATA0,ACK)
 			--=====================================================
 			when 7=>
-			--PID_SOF
+			--PID_SOF [COMMON]
 				--frame_number 0 to 11
 				if counter_PAS=DEMI_PAS then
 					if counter_TRAME<8 then
@@ -473,7 +478,20 @@ if rising_edge(clk) then
 					else
 						counter_TRAME:=0;
 						frame_number:=frame_number+1;
-						step_ps3:=8;
+
+						if step_ps3_sof=35 then
+							if interval>bInterval+1 then
+								interval:=x"00";
+								-- step_ps3:=35;
+								step_ps3:=step_ps3_sof;
+							else
+								interval:=interval+1;
+								time_out:=true; -- wait next SOF
+							end if;
+						else
+							step_ps3:=step_ps3_sof;
+						end if;
+
 					end if;
 					if step_ps3=7 then
 						counter_TRAME:=counter_TRAME+1;
@@ -507,54 +525,66 @@ if rising_edge(clk) then
 						USB_DATA<=UN;
 					elsif counter_TRAME<8+TRAME_SET_SETUP'length+2+5 +8+TRAME_SET_DATA0'length+2+1+1 then
 						USB_DATA<="ZZ";
-					elsif counter_TRAME<8+TRAME_SET_SETUP'length+2+5 +8+TRAME_SET_DATA0'length+2+1+1 +8 then
+--					elsif counter_TRAME<8+TRAME_SET_SETUP'length+2+5 +8+TRAME_SET_DATA0'length+2+1+1 +8 then
+					else
 						-- TIME_OUT ?
 						step_ps3:=9;
-					else
-						counter_TRAME:=0;
-						time_out:=true;
-						step_ps3:=7; -- next SOF
+						step_ps3_sof:=8;
+						counter_TIMEOUT:=0;
+--					else
+--						counter_TRAME:=0;
+--						time_out:=true;
+--						step_ps3:=7; -- next SOF
+--						step_ps3_sof:=8;
 					end if;
 					counter_TRAME:=counter_TRAME+1;
 				end if;
 			when 9=> --
 				if counter_PAS=DEMI_PAS then
-					if counter_TRAME<8+TRAME_SET_SETUP'length+2+5 +8+TRAME_SET_DATA0'length+2+1+1 +8 then
+					if counter_TIMEOUT< 8*10 then
 						USB_DATA<="ZZ";
 					else
-						-- TIME_OUT
-						step_ps3:=8;
+						-- TIME_OUT !
+						--step_ps3:=8;
+						counter_TRAME:=0;
+						time_out:=true;
+						step_ps3:=7; -- next SOF
+						--step_ps3_sof:=8;
 					end if;
-					counter_TRAME:=counter_TRAME+1;
+					counter_TIMEOUT:=counter_TIMEOUT+1;
 				end if;
 				
 				if USB_DATA=ZERO then
 					last_USB_DATA:=EOP;-- not(USB_DATA=ZERO)
 					mode_receive:=true;
-					step_ps3:=10;
+					step_ps3:=(step_ps3_sof+2); --10;
 					counter_TRAME:=0;
 					counter_PAS:=0;
 				end if;
 			when 10=> -- reception ACK ????
-				if counter_PAS=DEMI_PAS then
+				if counter_PAS=DEMI_PAS then --a
 					if counter_TRAME<8 then
 						if not(SYNCHRO(8 -1-counter_TRAME)=S_data2bit) then
 							-- pas cool
 							step_ps3:=11;counter_TRAME:=0;mode_receive:=false;
+							--step_ps3_sof:=8;
 						end if;
 						stuff_init;
 						nrzi_init;
-					elsif counter_TRAME<8+ACK'length then
+					elsif counter_TRAME<8+ACK'length then --a
 						nrzi_inv(S_data2bit,last_nrzi,result);
 						stuff(result);
 						if not(result=ACK(8+ACK'length -1-counter_TRAME)) then
 							-- pas cool
 							step_ps3:=11;counter_TRAME:=0;mode_receive:=false;
+							--step_ps3_sof:=8;
 						end if;
 					else
 						pause(PAS);
 						time_out:=true;
-						step_ps3:=12; --next INSTRUCTION
+						step_ps3:=7; --12; --next INSTRUCTION
+						--step_ps3_sof:=13;
+						step_ps3_sof:=step_ps3_sof+5;
 					end if;
 					if step_ps3=10 then
 						counter_TRAME:=counter_TRAME+1;
@@ -566,46 +596,13 @@ if rising_edge(clk) then
 					pause(PAS);
 					time_out:=true;
 					step_ps3:=7; --next SOF
+					step_ps3_sof:=8;
 				end if;
 			--==================================
 			-- TRAME SET (SOF,IN_ADDR_ENDP,ACK)
 			--==================================
-			when 12=>
-			--PID_SOF
-				--frame_number 0 to 11
-				if counter_PAS=DEMI_PAS then
-					if counter_TRAME<8 then
-						USB_DATA<=bit2data(SYNCHRO(8 -1-counter_TRAME));
-						stuff_init;
-						nrzi_init;
-					elsif counter_TRAME<8+8 then
-						stuff(SOF(8+8 -1-counter_TRAME));
-						nrzi(SOF(8+8 -1-counter_TRAME),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-						crc5_init;
-					elsif counter_TRAME<8+8+11 then -- stuff osef (si ça passe pas, ça passe pas)
-						stuff(frame_number(counter_TRAME-8-8));
-						nrzi(frame_number(counter_TRAME-8-8),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-						crc5_value:=crc5(frame_number(counter_TRAME-8-8),crc5_value);
-					elsif counter_TRAME<8+8+11+5 then
-						-- reverse and inverse
-						stuff(not(crc5_value(8+8+11+5 -1-counter_TRAME)));
-						nrzi(not(crc5_value(8+8+11+5 -1-counter_TRAME)),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-					elsif counter_TRAME<8+8+11+5+2 then
-						USB_DATA<=EOP;
-					elsif counter_TRAME<8+8+11+5+2+3 then
-						USB_DATA<="ZZ";
-					else
-						counter_TRAME:=0;
-						frame_number:=frame_number+1;
-						step_ps3:=13;
-					end if;
-					if step_ps3=12 then
-						counter_TRAME:=counter_TRAME+1;
-					end if;
-				end if;
+--			when 12=>
+--			--PID_SOF
 			when 13=>
 				if counter_PAS=DEMI_PAS then
 					if counter_TRAME<8 then
@@ -622,30 +619,37 @@ if rising_edge(clk) then
 						USB_DATA<=UN;
 					elsif counter_TRAME<8+IN_ADDR_ENDP'length+2+1+1 then
 						USB_DATA<="ZZ";
-					elsif counter_TRAME<8+IN_ADDR_ENDP'length+2+1+1 +8 then
+--					elsif counter_TRAME<8+IN_ADDR_ENDP'length+2+1+1 +8 then
+					else
 						-- TIME_OUT ?
 						step_ps3:=14;
-					else
-						step_ps3:=12;-- next SOF
-						time_out:=true;
+						step_ps3_sof:=13;
+						counter_TIMEOUT:=0;
+--					else
+--						step_ps3:=7; --12;-- next SOF
+--						step_ps3_sof:=13;
+--						time_out:=true;
 					end if;
 					counter_TRAME:=counter_TRAME+1;
 				end if;
 			when 14=> --
 				if counter_PAS=DEMI_PAS then
-					if counter_TRAME<8+IN_ADDR_ENDP'length+2+1+1 +8*10 then
+					if counter_TIMEOUT<8*10 then
 						USB_DATA<="ZZ";
 					else
-						-- TIME_OUT
-						step_ps3:=13;
+						-- TIME_OUT !
+						--step_ps3:=13;
+						step_ps3:=7; --12;-- next SOF
+						--step_ps3_sof:=13;
+						time_out:=true;
 					end if;
-					counter_TRAME:=counter_TRAME+1;
+					counter_TIMEOUT:=counter_TIMEOUT+1;
 				end if;
 				
 				if USB_DATA=ZERO then
 					last_USB_DATA:=EOP;-- not(USB_DATA=ZERO)
 					mode_receive:=true;
-					step_ps3:=15;
+					step_ps3:=(step_ps3_sof+2); --15;
 					counter_TRAME:=0;
 					counter_PAS:=0;
 				end if;
@@ -655,6 +659,7 @@ if rising_edge(clk) then
 						if not(SYNCHRO(8 -1-counter_TRAME)=S_data2bit) then
 							-- pas cool
 							step_ps3:=16;counter_TRAME:=0;mode_receive:=false;
+							step_ps3_sof:=13;
 						end if;
 						stuff_init;
 						nrzi_init;
@@ -668,6 +673,7 @@ if rising_edge(clk) then
 							elsif PID_mem=NACK then
 								-- pas cool : attendre
 								step_ps3:=16;counter_TRAME:=0;mode_receive:=false;
+								step_ps3_sof:=13;
 							else -- STALL or DATA0
 								-- pas cool : reset cmd
 								step_ps3:=11;counter_TRAME:=0;mode_receive:=false;
@@ -689,20 +695,22 @@ if rising_edge(clk) then
 					end if;
 				end if;
 			when 16=>
-				-- wait EOP
+				-- wait EOP [COMMON]
 				if USB_DATA=EOP and counter_PAS=DEMI_PAS then
 					pause(PAS);
 					time_out:=true;
-					step_ps3:=12; -- next SOF
+					step_ps3:=7; --12; -- next SOF
+					-- step_ps3_sof:=13;
 				end if;
 			when 17=>
-				-- envoyer un ACK
+				HID_REPORT_SET <= '0';
+				-- envoyer un ACK --b
 				if counter_PAS=DEMI_PAS then
 					if counter_TRAME<8 then
 						USB_DATA<=bit2data(SYNCHRO(8 -1-counter_TRAME));
 						stuff_init;
 						nrzi_init;
-					elsif counter_TRAME<8+ACK'length then
+					elsif counter_TRAME<8+ACK'length then --b
 						stuff(ACK(8+ACK'length -1-counter_TRAME));
 						nrzi(ACK(8+ACK'length -1-counter_TRAME),last_nrzi,result);
 						USB_DATA<=bit2data(result);
@@ -723,42 +731,8 @@ if rising_edge(clk) then
 			--========================================================
 			-- TRAME_GET (SOF, TRAME_GET_SETUP, TRAME_GET_DATA0, ACK)
 			--========================================================
-			when 18=>
-			--PID_SOF
-				--frame_number 0 to 11
-				if counter_PAS=DEMI_PAS then
-					if counter_TRAME<8 then
-						USB_DATA<=bit2data(SYNCHRO(8 -1-counter_TRAME));
-						stuff_init;
-						nrzi_init;
-					elsif counter_TRAME<8+8 then
-						stuff(SOF(8+8 -1-counter_TRAME));
-						nrzi(SOF(8+8 -1-counter_TRAME),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-						crc5_init;
-					elsif counter_TRAME<8+8+11 then -- stuff osef (si ça passe pas, ça passe pas)
-						stuff(frame_number(counter_TRAME-8-8));
-						nrzi(frame_number(counter_TRAME-8-8),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-						crc5_value:=crc5(frame_number(counter_TRAME-8-8),crc5_value);
-					elsif counter_TRAME<8+8+11+5 then
-						-- reverse and inverse
-						stuff(not(crc5_value(8+8+11+5 -1-counter_TRAME)));
-						nrzi(not(crc5_value(8+8+11+5 -1-counter_TRAME)),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-					elsif counter_TRAME<8+8+11+5+2 then
-						USB_DATA<=EOP;
-					elsif counter_TRAME<8+8+11+5+2+3 then
-						USB_DATA<="ZZ";
-					else
-						counter_TRAME:=0;
-						frame_number:=frame_number+1;
-						step_ps3:=19;
-					end if;
-					if step_ps3=18 then
-						counter_TRAME:=counter_TRAME+1;
-					end if;
-				end if;
+--			when 18=>
+--			--PID_SOF
 			when 19=>
 				if counter_PAS=DEMI_PAS then
 					if counter_TRAME<8 then
@@ -787,105 +761,52 @@ if rising_edge(clk) then
 						USB_DATA<=UN;
 					elsif counter_TRAME<8+TRAME_GET_SETUP'length+2+5 +8+TRAME_GET_DATA0'length+2+1+1 then
 						USB_DATA<="ZZ";
-					elsif counter_TRAME<8+TRAME_GET_SETUP'length+2+5 +8+TRAME_GET_DATA0'length+2+1+1 +8 then
+--					elsif counter_TRAME<8+TRAME_GET_SETUP'length+2+5 +8+TRAME_GET_DATA0'length+2+1+1 +8 then
+					else
 						-- TIME_OUT ?
 						step_ps3:=20;
-					else
-						counter_TRAME:=0;
-						time_out:=true;
-						step_ps3:=18; -- next SOF
+						step_ps3_sof:=19;
+						counter_TIMEOUT:=0;
+--					else
+--						counter_TRAME:=0;
+--						time_out:=true;
+--						step_ps3:=7; --18; -- next SOF
+--						step_ps3_sof:=19;
 					end if;
 					counter_TRAME:=counter_TRAME+1;
 				end if;
 			when 20=> --
 				if counter_PAS=DEMI_PAS then
-					if counter_TRAME<8+TRAME_GET_SETUP'length+2+5 +8+TRAME_GET_DATA0'length+2+1+1 +8 then
+					if counter_TIMEOUT<8*10 then -- ???
 						USB_DATA<="ZZ";
 					else
-						-- TIME_OUT
-						step_ps3:=19;
+						-- TIME_OUT !
+						--step_ps3:=19;
+						counter_TRAME:=0;
+						time_out:=true;
+						step_ps3:=7; --18; -- next SOF
+						--step_ps3_sof:=19;
 					end if;
-					counter_TRAME:=counter_TRAME+1;
+					counter_TIMEOUT:=counter_TIMEOUT+1;
 				end if;
 				
 				if USB_DATA=ZERO then
 					last_USB_DATA:=EOP;-- not(USB_DATA=ZERO)
 					mode_receive:=true;
-					step_ps3:=21;
+					--step_ps3:=(step_ps3_sof+2); --21;
+					step_ps3:=10; --(step_ps3_sof+2); --21;
 					counter_TRAME:=0;
 					counter_PAS:=0;
 				end if;
-			when 21=> -- reception ACK
-				if counter_PAS=DEMI_PAS then
-					if counter_TRAME<8 then
-						if not(SYNCHRO(8 -1-counter_TRAME)=S_data2bit) then
-							-- pas cool
-							step_ps3:=22;counter_TRAME:=0;mode_receive:=false;
-						end if;
-						stuff_init;
-						nrzi_init;
-					elsif counter_TRAME<8+ACK'length then
-						nrzi_inv(S_data2bit,last_nrzi,result);
-						stuff(result);
-						if not(result=ACK(8+ACK'length -1-counter_TRAME)) then
-							-- pas cool
-							step_ps3:=22;counter_TRAME:=0;mode_receive:=false;
-						end if;
-					else
-						pause(PAS);
-						time_out:=true;
-							step_ps3:=23; --24; next INSTRUCTION
-					end if;
-					if step_ps3=21 then
-						counter_TRAME:=counter_TRAME+1;
-					end if;
-				end if;
-			when 22=>
-				-- wait EOP
-				if USB_DATA=EOP and counter_PAS=DEMI_PAS then
-					pause(PAS);
-					time_out:=true;
-					step_ps3:=18; -- next SOF
-				end if;
+--			when 21=> -- reception ACK
+--
+--			when 22=>
+--				-- wait EOP
 			--========================
 			-- TRAME_GET (SOF,IN_ADDR_ENDP,ACK)
 			--========================
-			when 23=>
-			--PID_SOF
-				--frame_number 0 to 11
-				if counter_PAS=DEMI_PAS then
-					if counter_TRAME<8 then
-						USB_DATA<=bit2data(SYNCHRO(8 -1-counter_TRAME));
-						stuff_init;
-						nrzi_init;
-					elsif counter_TRAME<8+8 then
-						stuff(SOF(8+8 -1-counter_TRAME));
-						nrzi(SOF(8+8 -1-counter_TRAME),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-						crc5_init;
-					elsif counter_TRAME<8+8+11 then -- stuff osef (si ça passe pas, ça passe pas)
-						stuff(frame_number(counter_TRAME-8-8));
-						nrzi(frame_number(counter_TRAME-8-8),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-						crc5_value:=crc5(frame_number(counter_TRAME-8-8),crc5_value);
-					elsif counter_TRAME<8+8+11+5 then
-						-- reverse and inverse
-						stuff(not(crc5_value(8+8+11+5 -1-counter_TRAME)));
-						nrzi(not(crc5_value(8+8+11+5 -1-counter_TRAME)),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-					elsif counter_TRAME<8+8+11+5+2 then
-						USB_DATA<=EOP;
-					elsif counter_TRAME<8+8+11+5+2+3 then
-						USB_DATA<="ZZ";
-					else
-						counter_TRAME:=0;
-						frame_number:=frame_number+1;
-						step_ps3:=24;
-					end if;
-					if step_ps3=23 then
-						counter_TRAME:=counter_TRAME+1;
-					end if;
-				end if;
+--			when 23=>
+--			--PID_SOF
 			when 24=>
 				if counter_PAS=DEMI_PAS then
 					if counter_TRAME<8 then
@@ -902,30 +823,37 @@ if rising_edge(clk) then
 						USB_DATA<=UN;
 					elsif counter_TRAME<8+IN_ADDR_ENDP'length+2+1+1 then
 						USB_DATA<="ZZ";
-					elsif counter_TRAME<8+IN_ADDR_ENDP'length+2+1+1 +8 then
+--					elsif counter_TRAME<8+IN_ADDR_ENDP'length+2+1+1 +8 then
+					else
 						-- TIME_OUT ?
 						step_ps3:=25;
-					else
-						step_ps3:=23;-- next SOF
-						time_out:=true;
+						step_ps3_sof:=24;
+						counter_TIMEOUT:=0;
+--					else
+--						step_ps3:=7; --23;-- next SOF
+--						step_ps3_sof:=24;
+--						time_out:=true;
 					end if;
 					counter_TRAME:=counter_TRAME+1;
 				end if;
 			when 25=> --
 				if counter_PAS=DEMI_PAS then
-					if counter_TRAME<8+IN_ADDR_ENDP'length+2+1+1 +8*10 then
+					if counter_TIMEOUT<8*10 then
 						USB_DATA<="ZZ";
 					else
-						-- TIME_OUT
-						step_ps3:=24;
+						-- TIME_OUT !
+						--step_ps3:=24;
+						step_ps3:=7; --23;-- next SOF
+						--step_ps3_sof:=24;
+						time_out:=true;
 					end if;
-					counter_TRAME:=counter_TRAME+1;
+					counter_TIMEOUT:=counter_TIMEOUT+1;
 				end if;
 				
 				if USB_DATA=ZERO then
 					last_USB_DATA:=EOP;-- not(USB_DATA=ZERO)
 					mode_receive:=true;
-					step_ps3:=26;
+					step_ps3:=(step_ps3_sof+2); --26;
 					counter_TRAME:=0;
 					counter_PAS:=0;
 				end if;
@@ -934,7 +862,8 @@ if rising_edge(clk) then
 					if counter_TRAME<8 then
 						if not(SYNCHRO(8 -1-counter_TRAME)=S_data2bit) then
 							-- pas cool
-							step_ps3:=27;counter_TRAME:=0;mode_receive:=false;
+							step_ps3:=16; --27;counter_TRAME:=0;mode_receive:=false;
+							step_ps3_sof:=24;
 						end if;
 						stuff_init;
 						nrzi_init;
@@ -948,7 +877,8 @@ if rising_edge(clk) then
 								-- cool
 							elsif PID_mem=NACK then
 								-- pas cool : attendre
-								step_ps3:=27;counter_TRAME:=0;mode_receive:=false;
+								step_ps3:=16; --27;counter_TRAME:=0;mode_receive:=false;
+								step_ps3_sof:=24;
 							else -- STALL
 								-- pas cool : reset cmd
 								step_ps3:=22;counter_TRAME:=0;mode_receive:=false;
@@ -988,13 +918,8 @@ if rising_edge(clk) then
 						counter_TRAME:=counter_TRAME+1;
 					end if;
 				end if;
-			when 27=>
-				-- wait EOP
-				if USB_DATA=EOP and counter_PAS=DEMI_PAS then
-					pause(PAS);
-					time_out:=true;
-					step_ps3:=23; -- next SOF
-				end if;
+--			when 27=>
+--				-- wait EOP
 			when 28=>
 				-- envoyer un ACK
 				if counter_PAS=DEMI_PAS then
@@ -1002,7 +927,7 @@ if rising_edge(clk) then
 						USB_DATA<=bit2data(SYNCHRO(8 -1-counter_TRAME));
 						stuff_init;
 						nrzi_init;
-					elsif counter_TRAME<8+ACK'length then
+					elsif counter_TRAME<8+ACK'length then --c
 						stuff(ACK(8+ACK'length -1-counter_TRAME));
 						nrzi(ACK(8+ACK'length -1-counter_TRAME),last_nrzi,result);
 						USB_DATA<=bit2data(result);
@@ -1015,11 +940,13 @@ if rising_edge(clk) then
 						time_out:=true;
 						if conv_integer(SIZE_mem)=DATA_MAX_SIZE then
 							--encore !
-							step_ps3:=23; -- next SOF
+							step_ps3:=7; --23; -- next SOF
+							step_ps3_sof:=24;
 						else
 							--merci et au revoir
 							--step_ps3:=1;
-							step_ps3:=29; -- next SOF next INSTRUCTION
+							step_ps3:=7; --29; -- next SOF next INSTRUCTION
+							step_ps3_sof:=30;
 						end if;
 					end if;
 					if step_ps3=28 then
@@ -1027,7 +954,7 @@ if rising_edge(clk) then
 					end if;
 				end if;				
 			when 41=>
-				-- envoyer un NACK
+				-- envoyer un NACK --b
 				if counter_PAS=DEMI_PAS then
 					if counter_TRAME<8 then
 						USB_DATA<=bit2data(SYNCHRO(8 -1-counter_TRAME));
@@ -1045,7 +972,8 @@ if rising_edge(clk) then
 						pause(PAS-DEMI_PAS);
 						time_out:=true;
 						--encore !
-						step_ps3:=23; -- next SOF
+						step_ps3:=7; --23; -- next SOF
+						step_ps3_sof:=24;
 					end if;
 					if step_ps3=41 then
 						counter_TRAME:=counter_TRAME+1;
@@ -1054,42 +982,8 @@ if rising_edge(clk) then
 			--========================
 			-- TRAME_GET (SOF,OUT_ADDR_ENDP,OUT_DATA1,ACK)
 			--========================
-			when 29=>
-			--PID_SOF
-				--frame_number 0 to 11
-				if counter_PAS=DEMI_PAS then
-					if counter_TRAME<8 then
-						USB_DATA<=bit2data(SYNCHRO(8 -1-counter_TRAME));
-						stuff_init;
-						nrzi_init;
-					elsif counter_TRAME<8+8 then
-						stuff(SOF(8+8 -1-counter_TRAME));
-						nrzi(SOF(8+8 -1-counter_TRAME),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-						crc5_init;
-					elsif counter_TRAME<8+8+11 then -- stuff osef (si ça passe pas, ça passe pas)
-						stuff(frame_number(counter_TRAME-8-8));
-						nrzi(frame_number(counter_TRAME-8-8),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-						crc5_value:=crc5(frame_number(counter_TRAME-8-8),crc5_value);
-					elsif counter_TRAME<8+8+11+5 then
-						-- reverse and inverse
-						stuff(not(crc5_value(8+8+11+5 -1-counter_TRAME)));
-						nrzi(not(crc5_value(8+8+11+5 -1-counter_TRAME)),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-					elsif counter_TRAME<8+8+11+5+2 then
-						USB_DATA<=EOP;
-					elsif counter_TRAME<8+8+11+5+2+3 then
-						USB_DATA<="ZZ";
-					else
-						counter_TRAME:=0;
-						frame_number:=frame_number+1;
-						step_ps3:=30;
-					end if;
-					if step_ps3=29 then
-						counter_TRAME:=counter_TRAME+1;
-					end if;
-				end if;
+--			when 29=>
+--			--PID_SOF
 			when 30=>
 				if counter_PAS=DEMI_PAS then
 					if counter_TRAME<8 then
@@ -1118,31 +1012,39 @@ if rising_edge(clk) then
 						USB_DATA<=UN;
 					elsif counter_TRAME<8+OUT_ADDR_ENDP'length+2+5 +8+TRAME_OUT_DATA1_length+2+1+1 then
 						USB_DATA<="ZZ";
-					elsif counter_TRAME<8+OUT_ADDR_ENDP'length+2+5 +8+TRAME_OUT_DATA1_length+2+1+1 +8 then
+--					elsif counter_TRAME<8+OUT_ADDR_ENDP'length+2+5 +8+TRAME_OUT_DATA1_length+2+1+1 +8 then
+					else
 						-- TIME_OUT ?
 						step_ps3:=31;
-					else
-						counter_TRAME:=0;
-						time_out:=true;
-						step_ps3:=29; -- next SOF
+						step_ps3_sof:=30;
+						counter_TIMEOUT:=0;
+--					else
+--						counter_TRAME:=0;
+--						time_out:=true;
+--						step_ps3:=7; --29; -- next SOF
+--						step_ps3_sof:=30;
 					end if;
 					counter_TRAME:=counter_TRAME+1;
 				end if;
 			when 31=> --
 				if counter_PAS=DEMI_PAS then
-					if counter_TRAME<8+OUT_ADDR_ENDP'length+2+5 +8+TRAME_OUT_DATA1_length+2+1+1 +8 then
+					if counter_TIMEOUT<8*10 then -- ???
 						USB_DATA<="ZZ";
 					else
-						-- TIME_OUT
-						step_ps3:=30;
+						-- TIME_OUT !
+						--step_ps3:=30;
+						counter_TRAME:=0;
+						time_out:=true;
+						step_ps3:=7; --29; -- next SOF
+						--step_ps3_sof:=30;
 					end if;
-					counter_TRAME:=counter_TRAME+1;
+					counter_TIMEOUT:=counter_TIMEOUT+1;
 				end if;
 				
 				if USB_DATA=ZERO then
 					last_USB_DATA:=EOP;-- not(USB_DATA=ZERO)
 					mode_receive:=true;
-					step_ps3:=32;
+					step_ps3:=(step_ps3_sof+2); --32;
 					counter_TRAME:=0;
 					counter_PAS:=0;
 				end if;
@@ -1151,16 +1053,18 @@ if rising_edge(clk) then
 					if counter_TRAME<8 then
 						if not(SYNCHRO(8 -1-counter_TRAME)=S_data2bit) then
 							-- pas cool
-							step_ps3:=33;counter_TRAME:=0;mode_receive:=false;
+							step_ps3:=16; --33;counter_TRAME:=0;mode_receive:=false;
+							step_ps3_sof:=30;
 						end if;
 						stuff_init;
 						nrzi_init;
-					elsif counter_TRAME<8+ACK'length then
+					elsif counter_TRAME<8+ACK'length then --a
 						nrzi_inv(S_data2bit,last_nrzi,result);
 						stuff(result);
 						if not(result=ACK(8+ACK'length -1-counter_TRAME)) then
 							-- pas cool
-							step_ps3:=33;counter_TRAME:=0;mode_receive:=false;
+							step_ps3:=16; --33;counter_TRAME:=0;mode_receive:=false;
+							step_ps3_sof:=30;
 						end if;
 					else
 						pause(PAS);
@@ -1172,61 +1076,14 @@ if rising_edge(clk) then
 						counter_TRAME:=counter_TRAME+1;
 					end if;
 				end if;
-			when 33=>
-				-- wait EOP
-				if USB_DATA=EOP and counter_PAS=DEMI_PAS then
-					pause(PAS);
-					time_out:=true;
-					step_ps3:=29; -- next SOF
-				end if;
+--			when 33=>
+--				-- wait EOP
 			--=============================
 			-- PLUG (SOF,IN_ADDR_ENDP,ACK)
 			--=============================
 			-- toujours vide, non lancé du coup
-			when 34=>
-			--PID_SOF
-				--frame_number 0 to 11
-				if counter_PAS=DEMI_PAS then
-					if counter_TRAME<8 then
-						USB_DATA<=bit2data(SYNCHRO(8 -1-counter_TRAME));
-						stuff_init;
-						nrzi_init;
-					elsif counter_TRAME<8+8 then
-						stuff(SOF(8+8 -1-counter_TRAME));
-						nrzi(SOF(8+8 -1-counter_TRAME),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-						crc5_init;
-					elsif counter_TRAME<8+8+11 then -- stuff osef (si ça passe pas, ça passe pas)
-						stuff(frame_number(counter_TRAME-8-8));
-						nrzi(frame_number(counter_TRAME-8-8),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-						crc5_value:=crc5(frame_number(counter_TRAME-8-8),crc5_value);
-					elsif counter_TRAME<8+8+11+5 then
-						-- reverse and inverse
-						stuff(not(crc5_value(8+8+11+5 -1-counter_TRAME)));
-						nrzi(not(crc5_value(8+8+11+5 -1-counter_TRAME)),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-					elsif counter_TRAME<8+8+11+5+2 then
-						USB_DATA<=EOP;
-					elsif counter_TRAME<8+8+11+5+2+3 then
-						USB_DATA<="ZZ";
-					else
-						counter_TRAME:=0;
-						frame_number:=frame_number+1;
-						
-						if interval>bInterval+1 then
-							interval:=x"00";
-							step_ps3:=35;
-						else
-							interval:=interval+1;
-							time_out:=true; -- wait next SOF
-						end if;
-						
-					end if;
-					if step_ps3=34 then
-						counter_TRAME:=counter_TRAME+1;
-					end if;
-				end if;
+--			when 34=>
+--			--PID_SOF
 			when 35=>
 				if counter_PAS=DEMI_PAS then
 					if counter_TRAME<8 then
@@ -1243,30 +1100,37 @@ if rising_edge(clk) then
 						USB_DATA<=UN;
 					elsif counter_TRAME<8+IN_ADDR_ENDP'length+2+1+1 then
 						USB_DATA<="ZZ";
-					elsif counter_TRAME<8+IN_ADDR_ENDP'length+2+1+1 +8 then
+--					elsif counter_TRAME<8+IN_ADDR_ENDP'length+2+1+1 +8 then
+					else
 						-- TIME_OUT ?
 						step_ps3:=36;
-					else
-						step_ps3:=34;-- next SOF
-						time_out:=true;
+						step_ps3_sof:=35;
+						counter_TIMEOUT:=0;
+--					else
+--						step_ps3:=7; --34;-- next SOF
+--						step_ps3_sof:=35;
+--						time_out:=true;
 					end if;
 					counter_TRAME:=counter_TRAME+1;
 				end if;
 			when 36=> --
 				if counter_PAS=DEMI_PAS then
-					if counter_TRAME<8+IN_ADDR_ENDP'length+2+1+1 +8*10 then
+					if counter_TIMEOUT<8*10 then
 						USB_DATA<="ZZ";
 					else
-						-- TIME_OUT
-						step_ps3:=35;
+						-- TIME_OUT !
+						--step_ps3:=35;
+						step_ps3:=7; --34;-- next SOF
+						--step_ps3_sof:=35;
+						time_out:=true;
 					end if;
-					counter_TRAME:=counter_TRAME+1;
+					counter_TIMEOUT:=counter_TIMEOUT+1;
 				end if;
 				
 				if USB_DATA=ZERO then
 					last_USB_DATA:=EOP;-- not(USB_DATA=ZERO)
 					mode_receive:=true;
-					step_ps3:=37;
+					step_ps3:=(step_ps3_sof+2); --37;
 					counter_TRAME:=0;
 					counter_PAS:=0;
 				end if;
@@ -1275,7 +1139,8 @@ if rising_edge(clk) then
 					if counter_TRAME<8 then
 						if not(SYNCHRO(8 -1-counter_TRAME)=S_data2bit) then
 							-- pas cool
-							step_ps3:=38;counter_TRAME:=0;mode_receive:=false;
+							step_ps3:=16; --38;counter_TRAME:=0;mode_receive:=false;
+							step_ps3_sof:=35;
 						end if;
 						stuff_init;
 						nrzi_init;
@@ -1300,7 +1165,8 @@ if rising_edge(clk) then
 								step_ps3:=2; -- death
 							else
 								-- pas cool : surement le NACK (ping failed)
-								step_ps3:=38;counter_TRAME:=0;mode_receive:=false;	
+								step_ps3:=16; --38;counter_TRAME:=0;mode_receive:=false;	
+								step_ps3_sof:=35;
 							end if;
 						end if;
 					elsif USB_DATA=EOP then
@@ -1308,7 +1174,7 @@ if rising_edge(clk) then
 							counter_TRAME:=0;
 							pause(PAS);
 							mode_receive:=false;
-							step_ps3:=39;
+							step_ps3:=17; --39;
 							if conv_integer(SIZE_mem)>0 then
 								for i in 0 to 15 loop
 									CRC16_mem(i):=not(CRC16_mem(i));
@@ -1334,48 +1200,20 @@ if rising_edge(clk) then
 					end if;
 					if counter_SOF_stuff*2>period_SOF then
 						-- timeout !
-						step_ps3:=38;counter_TRAME:=0;mode_receive:=false;
+						step_ps3:=16; --38;counter_TRAME:=0;mode_receive:=false;
+						step_ps3_sof:=35;
 					end if;
 
 					if step_ps3=37 then
 						counter_TRAME:=counter_TRAME+1;
 					end if;
 				end if;
-			when 38=>
-				-- wait EOP
-				if USB_DATA=EOP and counter_PAS=DEMI_PAS then
-					pause(PAS);
-					time_out:=true;
-					step_ps3:=34; -- next SOF
-				end if;
-			when 39=>
-				-- envoyer un ACK
-			    HID_REPORT_SET <= '0';
-				if counter_PAS=DEMI_PAS then
-					if counter_TRAME<8 then
-						USB_DATA<=bit2data(SYNCHRO(8 -1-counter_TRAME));
-						stuff_init;
-						nrzi_init;
-					elsif counter_TRAME<8+ACK'length then
-						stuff(ACK(8+ACK'length -1-counter_TRAME));
-						nrzi(ACK(8+ACK'length -1-counter_TRAME),last_nrzi,result);
-						USB_DATA<=bit2data(result);
-					elsif counter_TRAME<8+ACK'length+2 then
-						USB_DATA<=EOP;
-					elsif counter_TRAME<8+ACK'length+2+1 then
-						USB_DATA<=UN;
-					else
-						pause(PAS-DEMI_PAS);
-						time_out:=true;
-						step_ps3:=1;-- loop -- next SOF next INSTRUCTION
-						next_cmd:=true;
-					end if;
-					if step_ps3=39 then
-						counter_TRAME:=counter_TRAME+1;
-					end if;
-				end if;
+--			when 38=>
+--				-- wait EOP
+--			when 39=>
+--				-- envoyer un ACK --b
 			when 40=>
-				-- envoyer un NACK
+				-- envoyer un NACK --b
 				if counter_PAS=DEMI_PAS then
 					if counter_TRAME<8 then
 						USB_DATA<=bit2data(SYNCHRO(8 -1-counter_TRAME));
@@ -1399,6 +1237,16 @@ if rising_edge(clk) then
 						counter_TRAME:=counter_TRAME+1;
 					end if;
 				end if;
+			when others=>
+				-- RESET
+				step_ps3:=0;
+				-- startup_init;
+				-- counter_TRAME:=0;mode_receive:=false;
+				-- pause(PAS);
+				-- time_out:=true;
+				-- step_ps3:=0;-- next INSTRUCTION
+				-- step_cmd<=0;
+				-- next_cmd:=false;
 		end case;
 	end if;
 	
