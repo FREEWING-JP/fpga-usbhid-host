@@ -2,6 +2,8 @@
 http://www.neko.ne.jp/~freewing/fpga/usb_host_fpga_vhdl/  
 Support Low Speed & Full Speed USB HID devices .  
 
+[<img src="https://img.youtube.com/vi/Sz4I90Q1n_w/maxresdefault.jpg" alt="FPGA USB HID HOST written by VHDL" title="FPGA USB HID HOST written by VHDL" width="320" height="180"> YouTube https://youtu.be/TyokrHR_S_8](https://youtu.be/Sz4I90Q1n_w)  
+  
 ![usb 1](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/master/proj/xilinx/assets/usb_host_fpga_schematics.png)  
 ![usb 2](https://raw.githubusercontent.com/FREEWING-JP/fpga-usbhid-host/master/proj/xilinx/assets/usb_host_fpga_18.jpg)  
 I don't have 15k ohm resistor . So I use 22k ohm .  
